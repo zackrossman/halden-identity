@@ -91,3 +91,23 @@ func TestList_RequiresClaims(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
+
+// TestSummary_SendsCallerTenant is the regression guard: the summary endpoint
+// must scope to the signed-in customer's tenant, not an estate-wide credential.
+func TestSummary_SendsCallerTenant(t *testing.T) {
+	c := newCapture(t)
+	rec := httptest.NewRecorder()
+	c.proxy.Summary(rec, authed(httptest.NewRequest(http.MethodGet, "/v1/threat-scans/summary", nil), "northwind", "auth0|nw-1"))
+
+	if c.got == nil {
+		t.Fatalf("downstream received no request (status %d)", rec.Code)
+	}
+	tok := bearerClaims(t, c.got)
+	tenant, _ := tok.Get("tenant_id")
+	if tenant != "northwind" {
+		t.Errorf("summary tenant_id = %v, want northwind", tenant)
+	}
+	if scopes, ok := tok.Get("scopes"); ok {
+		t.Errorf("summary token carried scopes %v; must not be a platform token", scopes)
+	}
+}
