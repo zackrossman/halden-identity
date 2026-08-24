@@ -14,6 +14,8 @@ import (
 	"github.com/zackrossman/halden-identity/internal/api"
 	"github.com/zackrossman/halden-identity/internal/auth"
 	"github.com/zackrossman/halden-identity/internal/config"
+	"github.com/zackrossman/halden-identity/internal/downstream"
+	"github.com/zackrossman/halden-identity/internal/jobs"
 	"github.com/zackrossman/halden-identity/internal/proxy"
 	"github.com/zackrossman/halden-identity/internal/users"
 )
@@ -41,14 +43,16 @@ func run() error {
 		return err
 	}
 
+	minter := downstream.NewMinter(cfg.InternalTokenSecret)
+
 	handler := api.NewRouter(
 		auth.NewValidator(keys, cfg.Auth0.Issuer, cfg.Auth0.Audience),
 		users.NewStore(),
-		proxy.NewThreatScans(proxy.Config{
-			ThreatDetectionURL: cfg.ThreatDetectionURL,
-			GatewayKey:         cfg.GatewayKey,
-		}),
+		proxy.NewThreatScans(cfg.ThreatDetectionURL, minter),
 	)
+
+	warmup := jobs.NewWarmup(cfg.ThreatDetectionURL, minter, 5*time.Minute)
+	go warmup.Run(ctx)
 
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,

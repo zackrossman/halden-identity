@@ -8,18 +8,17 @@ reads to `halden-threat-detection`.
 ## Position in the platform
 
 Auth0 is the source of truth for users. `halden-identity` sits at the edge: it
-validates access tokens against the Auth0 JWKS endpoint and calls internal
-services with the propagated identity headers described in
-[docs/platform/internal-service-contract.md](docs/platform/internal-service-contract.md).
+validates access tokens against the Auth0 JWKS endpoint, then calls internal
+services with short-lived signed tokens it mints for each call.
 
 Downstream:
 
 | Service | Call |
 |---|---|
-| `halden-threat-detection` | `GET {THREAT_DETECTION_URL}/v1/scans` |
+| `halden-threat-detection` | `GET {THREAT_DETECTION_URL}/v1/scans`, `GET {THREAT_DETECTION_URL}/v1/scans/summary` |
 
-No other Halden service authenticates end users; validation is centralised here
-so that key rotation and Auth0 tenant changes touch one service.
+Validation of end-user tokens is centralised here so that key rotation and Auth0
+tenant changes touch one service.
 
 ## Endpoints
 
@@ -29,6 +28,7 @@ so that key rotation and Auth0 tenant changes touch one service.
 | GET | `/v1/users/me` | bearer token | The calling user's profile. |
 | GET | `/v1/users` | bearer token | Users in the caller's tenant. |
 | GET | `/v1/threat-scans` | bearer token | Threat scans for the caller's tenant, read from `halden-threat-detection`. |
+| GET | `/v1/threat-scans/summary` | bearer token | Precomputed threat-scan summary, served from the platform rollup. |
 
 Authenticated routes expect `Authorization: Bearer <Auth0 access token>`. The
 tenant comes from the `https://halden.io/tenant_id` claim on that token.
@@ -40,7 +40,7 @@ All settings come from the environment. See [.env.example](.env.example).
 | Variable | Required | Description |
 |---|---|---|
 | `HALDEN_LISTEN_ADDR` | no | Listen address, default `:8080`. |
-| `HALDEN_GATEWAY_KEY` | yes | Service-to-service credential for internal calls. Read from Key Vault in deployed environments. |
+| `HALDEN_INTERNAL_TOKEN_SECRET` | yes | Secret used to sign the short-lived tokens presented to internal services. Read from Key Vault in deployed environments. |
 | `THREAT_DETECTION_URL` | no | Base URL of `halden-threat-detection`, default `http://halden-threat-detection.halden.svc.cluster.local:8000`. |
 | `AUTH0_JWKS_URL` | yes | Auth0 JWKS endpoint. |
 | `AUTH0_ISSUER` | yes | Expected `iss` claim. |
@@ -49,7 +49,7 @@ All settings come from the environment. See [.env.example](.env.example).
 ## Development
 
 ```sh
-cp .env.example .env      # then fill in the Auth0 settings and gateway key
+cp .env.example .env      # then fill in the Auth0 settings and the token secret
 go build ./...
 go test ./...
 go run ./cmd/server
@@ -72,5 +72,5 @@ The image is a distroless static base and runs as a non-root user on port 8080.
 Azure infrastructure for this service lives in
 [deploy/terraform](deploy/terraform): an AKS workload with a private API server,
 an Application Gateway with WAF terminating TLS, a private container registry,
-a Key Vault holding the gateway key, and a network security group that limits
+a Key Vault holding the internal token secret, and a network security group that limits
 inbound traffic to the gateway subnet.

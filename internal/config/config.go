@@ -18,19 +18,19 @@ type Auth0 struct {
 
 // Config is the full service configuration.
 type Config struct {
-	ListenAddr         string
-	GatewayKey         string
-	ThreatDetectionURL string
-	Auth0              Auth0
+	ListenAddr          string
+	InternalTokenSecret string
+	ThreatDetectionURL  string
+	Auth0               Auth0
 }
 
 // Load reads the configuration from the environment. Every secret and endpoint
 // comes from the environment; nothing is baked into the binary.
 func Load() (Config, error) {
 	cfg := Config{
-		ListenAddr:         valueOr("HALDEN_LISTEN_ADDR", ":8080"),
-		GatewayKey:         os.Getenv("HALDEN_GATEWAY_KEY"),
-		ThreatDetectionURL: strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
+		ListenAddr:          valueOr("HALDEN_LISTEN_ADDR", ":8080"),
+		InternalTokenSecret: os.Getenv("HALDEN_INTERNAL_TOKEN_SECRET"),
+		ThreatDetectionURL:  strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
 		Auth0: Auth0{
 			JWKSURL:  os.Getenv("AUTH0_JWKS_URL"),
 			Issuer:   os.Getenv("AUTH0_ISSUER"),
@@ -39,10 +39,10 @@ func Load() (Config, error) {
 	}
 
 	required := map[string]string{
-		"HALDEN_GATEWAY_KEY": cfg.GatewayKey,
-		"AUTH0_JWKS_URL":     cfg.Auth0.JWKSURL,
-		"AUTH0_ISSUER":       cfg.Auth0.Issuer,
-		"AUTH0_AUDIENCE":     cfg.Auth0.Audience,
+		"HALDEN_INTERNAL_TOKEN_SECRET": cfg.InternalTokenSecret,
+		"AUTH0_JWKS_URL":               cfg.Auth0.JWKSURL,
+		"AUTH0_ISSUER":                 cfg.Auth0.Issuer,
+		"AUTH0_AUDIENCE":               cfg.Auth0.Audience,
 	}
 	for name, value := range required {
 		if value == "" {

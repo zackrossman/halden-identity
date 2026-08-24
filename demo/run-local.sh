@@ -5,8 +5,10 @@
 #   ~/dev/.../halden-identity        (this repo)
 #   ~/dev/.../halden-threat-detection
 #
-# Credentials are generated per run and never written to disk. Access tokens are
-# issued by a local mock OIDC provider so no Auth0 tenant is needed.
+# Credentials are generated per run and never written to disk. Inbound customer
+# access tokens are issued by a local mock OIDC provider, so no Auth0 tenant is
+# needed. halden-identity signs its own downstream tokens with a shared secret
+# that halden-threat-detection verifies.
 
 set -euo pipefail
 
@@ -20,7 +22,7 @@ if [[ -z "${THREAT_DIR}" ]]; then
   exit 1
 fi
 
-GATEWAY_KEY="$(openssl rand -hex 24)"
+INTERNAL_TOKEN_SECRET="$(openssl rand -hex 32)"
 PG_PASSWORD="$(openssl rand -hex 16)"
 
 echo "==> cleaning up any previous run"
@@ -44,7 +46,7 @@ docker build -q -t halden-identity:local "${IDENTITY_DIR}" >/dev/null
 
 echo "==> starting halden-threat-detection"
 docker run -d --name halden-threat-detection --network "${NET}" \
-  -e HALDEN_GATEWAY_KEY="${GATEWAY_KEY}" \
+  -e HALDEN_INTERNAL_TOKEN_SECRET="${INTERNAL_TOKEN_SECRET}" \
   -e HALDEN_DATABASE_URL="postgresql+psycopg://halden:${PG_PASSWORD}@halden-db:5432/halden" \
   -e HALDEN_ARTIFACT_DIR=/tmp/halden-artifacts \
   halden-threat-detection:local >/dev/null
@@ -58,7 +60,7 @@ docker exec halden-threat-detection python -m scripts.seed
 
 echo "==> starting halden-identity"
 docker run -d --name halden-identity --network "${NET}" -p 8080:8080 \
-  -e HALDEN_GATEWAY_KEY="${GATEWAY_KEY}" \
+  -e HALDEN_INTERNAL_TOKEN_SECRET="${INTERNAL_TOKEN_SECRET}" \
   -e THREAT_DETECTION_URL="http://halden-threat-detection:8000" \
   -e AUTH0_JWKS_URL="http://halden-mock-auth0:8080/halden/jwks" \
   -e AUTH0_ISSUER="http://localhost:8090/halden" \
@@ -79,7 +81,7 @@ mint_token() {
 NORTHWIND_TOKEN="$(mint_token northwind)"
 CONTOSO_TOKEN="$(mint_token contoso)"
 
-cat <<EOF
+cat <<MSG
 
 Stack is up.
 
@@ -87,15 +89,15 @@ Stack is up.
   mock OIDC provider       http://localhost:8090/halden
   seeded tenants           northwind, contoso
 
-Access tokens for this run have been issued. Try a request:
-
-  curl -s -H "Authorization: Bearer \$NORTHWIND_TOKEN" \\
-    http://localhost:8080/v1/threat-scans
-
-Export them into your shell with:
+Export tokens into your shell:
 
   export NORTHWIND_TOKEN=${NORTHWIND_TOKEN}
   export CONTOSO_TOKEN=${CONTOSO_TOKEN}
 
-Tear down with: docker rm -f halden-identity halden-threat-detection halden-db halden-mock-auth0
-EOF
+Then a normal request returns only the caller's tenant:
+
+  curl -s -H "Authorization: Bearer \$NORTHWIND_TOKEN" \\
+    http://localhost:8080/v1/threat-scans
+
+Tear down: docker rm -f halden-identity halden-threat-detection halden-db halden-mock-auth0
+MSG

@@ -7,16 +7,18 @@ import (
 	"net/http"
 
 	"github.com/zackrossman/halden-identity/internal/auth"
+	"github.com/zackrossman/halden-identity/internal/proxy"
 	"github.com/zackrossman/halden-identity/internal/users"
 )
 
 // NewRouter returns the service handler. /healthz is open; everything under
 // /v1 requires a valid Auth0 access token.
-func NewRouter(v *auth.Validator, store *users.Store, threatScans http.Handler) http.Handler {
+func NewRouter(v *auth.Validator, store *users.Store, threatScans *proxy.ThreatScans) http.Handler {
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /v1/users/me", currentUser(store))
 	protected.HandleFunc("GET /v1/users", listUsers(store))
-	protected.Handle("GET /v1/threat-scans", threatScans)
+	protected.HandleFunc("GET /v1/threat-scans", threatScans.List)
+	protected.HandleFunc("GET /v1/threat-scans/summary", threatScans.Summary)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {

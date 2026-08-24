@@ -26,8 +26,8 @@ variable "tls_certificate_secret_id" {
   type        = string
 }
 
-variable "gateway_key" {
-  description = "Service-to-service credential halden-identity presents to internal services. Supplied at apply time; never committed."
+variable "internal_token_secret" {
+  description = "Secret used to sign the short-lived tokens halden-identity presents to internal services. Supplied at apply time; never committed."
   type        = string
   sensitive   = true
 }

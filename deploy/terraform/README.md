@@ -26,7 +26,7 @@ pipeline's secret store:
 terraform apply \
   -var "app_hostname=api.halden.example" \
   -var "tls_certificate_secret_id=$TLS_CERT_SECRET_ID" \
-  -var "gateway_key=$HALDEN_GATEWAY_KEY"
+  -var "internal_token_secret=$HALDEN_INTERNAL_TOKEN_SECRET"
 ```
 
 Key Vault and the registry deny public network access. Set `management_cidrs`

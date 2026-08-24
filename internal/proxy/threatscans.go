@@ -11,44 +11,70 @@ import (
 	"github.com/zackrossman/halden-identity/internal/httpx"
 )
 
-// Config holds the settings the threat-scan proxy needs.
-type Config struct {
-	ThreatDetectionURL string
-	GatewayKey         string
+// Minter mints the downstream token a proxied call presents.
+type Minter interface {
+	UserToken(claims auth.Claims) (string, error)
+	PlatformToken() (string, error)
 }
 
-// ThreatScans serves GET /v1/threat-scans by calling halden-threat-detection.
+// ThreatScans proxies the threat-scan endpoints to halden-threat-detection.
 type ThreatScans struct {
-	cfg    Config
-	client *http.Client
+	baseURL string
+	minter  Minter
+	client  *http.Client
 }
 
-// NewThreatScans builds the handler.
-func NewThreatScans(cfg Config) *ThreatScans {
+// NewThreatScans builds the proxy against the downstream base URL.
+func NewThreatScans(baseURL string, minter Minter) *ThreatScans {
 	return &ThreatScans{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 20 * time.Second},
+		baseURL: baseURL,
+		minter:  minter,
+		client:  &http.Client{Timeout: 20 * time.Second},
 	}
 }
 
-func (h *ThreatScans) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// List serves GET /v1/threat-scans: the caller's own tenant's scans.
+func (h *ThreatScans) List(w http.ResponseWriter, r *http.Request) {
 	claims, ok := auth.FromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	token, err := h.minter.UserToken(claims)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "mint downstream token", "error", err)
+		http.Error(w, "bad gateway", http.StatusBadGateway)
+		return
+	}
+	h.forward(w, r, "/v1/scans", token)
+}
 
-	out, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.cfg.ThreatDetectionURL+"/v1/scans", nil)
+// Summary serves GET /v1/threat-scans/summary. The summary figures come from the
+// platform rollup, which runs under the platform credential.
+func (h *ThreatScans) Summary(w http.ResponseWriter, r *http.Request) {
+	if _, ok := auth.FromContext(r.Context()); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	token, err := h.minter.PlatformToken()
+	if err != nil {
+		slog.ErrorContext(r.Context(), "mint downstream token", "error", err)
+		http.Error(w, "bad gateway", http.StatusBadGateway)
+		return
+	}
+	h.forward(w, r, "/v1/scans/summary", token)
+}
+
+func (h *ThreatScans) forward(w http.ResponseWriter, r *http.Request, path, token string) {
+	out, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.baseURL+path, nil)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "build threat-detection request", "error", err)
 		http.Error(w, "bad gateway", http.StatusBadGateway)
 		return
 	}
 	out.URL.RawQuery = r.URL.RawQuery
-
-	out.Header.Set(httpx.HeaderTenantID, claims.TenantID)
-	out.Header.Set(httpx.HeaderGatewayKey, h.cfg.GatewayKey)
-	httpx.CopyClientContextHeaders(r, out)
+	out.Header.Set("Authorization", "Bearer "+token)
+	httpx.ForwardTelemetryHeaders(r, out)
 
 	resp, err := h.client.Do(out)
 	if err != nil {
