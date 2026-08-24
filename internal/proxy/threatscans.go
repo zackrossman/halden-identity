@@ -11,11 +11,10 @@ import (
 	"github.com/zackrossman/halden-identity/internal/httpx"
 )
 
-// Minter mints the downstream token a proxied customer call presents. It is
-// deliberately limited to user tokens: a request handler serves a signed-in
-// customer, so it must never reach for a platform-wide credential.
+// Minter mints the downstream token a proxied call presents.
 type Minter interface {
 	UserToken(claims auth.Claims) (string, error)
+	PlatformToken() (string, error)
 }
 
 // ThreatScans proxies the threat-scan endpoints to halden-threat-detection.
@@ -50,14 +49,14 @@ func (h *ThreatScans) List(w http.ResponseWriter, r *http.Request) {
 	h.forward(w, r, "/v1/scans", token)
 }
 
-// Summary serves GET /v1/threat-scans/summary for the caller's own tenant.
+// Summary serves GET /v1/threat-scans/summary. The summary figures come from the
+// platform rollup, which runs under the platform credential.
 func (h *ThreatScans) Summary(w http.ResponseWriter, r *http.Request) {
-	claims, ok := auth.FromContext(r.Context())
-	if !ok {
+	if _, ok := auth.FromContext(r.Context()); !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	token, err := h.minter.UserToken(claims)
+	token, err := h.minter.PlatformToken()
 	if err != nil {
 		slog.ErrorContext(r.Context(), "mint downstream token", "error", err)
 		http.Error(w, "bad gateway", http.StatusBadGateway)
