@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+*.env.local
+bin/
+deploy/
+docs/
+README.md
+*.md

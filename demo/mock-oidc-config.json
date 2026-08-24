@@ -1,0 +1,28 @@
+{
+  "interactiveLogin": false,
+  "tokenCallbacks": [
+    {
+      "issuerId": "halden",
+      "requestMappings": [
+        {
+          "requestParam": "scope",
+          "match": "tenant-northwind",
+          "claims": {
+            "sub": "auth0|northwind-admin",
+            "https://halden.io/tenant_id": "northwind",
+            "aud": ["halden-api"]
+          }
+        },
+        {
+          "requestParam": "scope",
+          "match": "tenant-contoso",
+          "claims": {
+            "sub": "auth0|contoso-admin",
+            "https://halden.io/tenant_id": "contoso",
+            "aud": ["halden-api"]
+          }
+        }
+      ]
+    }
+  ]
+}

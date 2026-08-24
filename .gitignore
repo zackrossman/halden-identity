@@ -1,0 +1,13 @@
+.env
+*.env.local
+/bin/
+/halden-identity
+*.test
+*.out
+
+# Terraform
+deploy/terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
