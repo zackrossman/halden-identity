@@ -23,6 +23,9 @@ func TestJWKSCacheMinTTL(t *testing.T) {
 		"unparseable falls back": {"soon", auth.DefaultJWKSMinRefreshInterval},
 		"empty-ish falls back":   {"   ", auth.DefaultJWKSMinRefreshInterval},
 		"float falls back":       {"5.5", auth.DefaultJWKSMinRefreshInterval},
+		"at the ceiling":         {"900", auth.MaxJWKSMinRefreshInterval},
+		"above the ceiling":      {"3600", auth.MaxJWKSMinRefreshInterval},
+		"absurd value clamped":   {"999999999", auth.MaxJWKSMinRefreshInterval},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("JWKS_CACHE_MIN_TTL_SECONDS", tc.env)
@@ -38,5 +41,29 @@ func TestDefaultIsShorterThanTheOldFifteenMinutes(t *testing.T) {
 	// key. A change that did not shorten it would close nothing.
 	if auth.DefaultJWKSMinRefreshInterval >= 15*time.Minute {
 		t.Errorf("default = %v, want less than 15m", auth.DefaultJWKSMinRefreshInterval)
+	}
+}
+
+// A configurable floor is only an improvement while it cannot be configured
+// back past where it started. An operator setting a year must not leave a
+// revoked Auth0 key trusted for a year.
+func TestJWKSCacheMinTTL_NeverExceedsTheCeiling(t *testing.T) {
+	for _, raw := range []string{"901", "3600", "86400", "31536000", "999999999"} {
+		t.Setenv("JWKS_CACHE_MIN_TTL_SECONDS", raw)
+		if got := jwksCacheMinTTL(); got > auth.MaxJWKSMinRefreshInterval {
+			t.Errorf("%s: got %v, above the ceiling %v", raw, got, auth.MaxJWKSMinRefreshInterval)
+		}
+	}
+}
+
+func TestCeilingIsNoWorseThanTheOldHardcodedValue(t *testing.T) {
+	// The window this control exists to shorten was 15 minutes before it was
+	// configurable. No configuration may make it worse than it already was.
+	if auth.MaxJWKSMinRefreshInterval > 15*time.Minute {
+		t.Errorf("ceiling = %v, want at most 15m", auth.MaxJWKSMinRefreshInterval)
+	}
+	if auth.DefaultJWKSMinRefreshInterval > auth.MaxJWKSMinRefreshInterval {
+		t.Errorf("default %v exceeds ceiling %v",
+			auth.DefaultJWKSMinRefreshInterval, auth.MaxJWKSMinRefreshInterval)
 	}
 }

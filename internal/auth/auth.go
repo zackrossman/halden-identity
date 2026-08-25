@@ -136,6 +136,19 @@ type JWKSCache struct {
 // against a CDN-backed URL — for a shorter window.
 const DefaultJWKSMinRefreshInterval = 5 * time.Minute
 
+// MaxJWKSMinRefreshInterval is the longest floor an operator may configure.
+//
+// The floor is the window in which a revoked key still validates tokens, so a
+// large value is not a tuning choice, it is the control switched off: at a day
+// or a year the cache effectively never refreshes and a key Auth0 retired is
+// honoured until the process restarts. This was not reachable when the
+// interval was hardcoded; making it configurable is what created the need for
+// a ceiling.
+//
+// Fifteen minutes is the value this was hardcoded at before, so no
+// configuration can make the window worse than it already was.
+const MaxJWKSMinRefreshInterval = 15 * time.Minute
+
 // NewJWKSCache registers the JWKS endpoint with a refreshing cache.
 //
 // A minRefresh of zero or less falls back to the default rather than being
