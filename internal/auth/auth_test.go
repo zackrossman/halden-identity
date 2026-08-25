@@ -88,8 +88,18 @@ func (s signer) token(t *testing.T, build func(*jwt.Builder) *jwt.Builder) strin
 	return string(signed)
 }
 
+// stubDirectory admits exactly the pairs it is given.
+type stubDirectory map[string]string
+
+func (d stubDirectory) HasMember(tenantID, subject string) bool {
+	return d[tenantID] == subject
+}
+
+// testDirectory admits the subject and tenant the test signer mints by default.
+func testDirectory() stubDirectory { return stubDirectory{"northwind": "auth0|nw-001"} }
+
 func newTestValidator(s signer) *Validator {
-	return NewValidator(staticKeys{set: s.public}, testIssuer, testAudience)
+	return NewValidator(staticKeys{set: s.public}, testIssuer, testAudience, testDirectory())
 }
 
 func TestValidate_AcceptsValidToken(t *testing.T) {
@@ -144,7 +154,7 @@ func TestValidate_RejectsTokenSignedByUnknownKey(t *testing.T) {
 	trusted := newSigner(t)
 	attacker := newSigner(t)
 
-	validator := NewValidator(staticKeys{set: trusted.public}, testIssuer, testAudience)
+	validator := NewValidator(staticKeys{set: trusted.public}, testIssuer, testAudience, testDirectory())
 	if _, err := validator.Validate(context.Background(), attacker.token(t, nil)); err == nil {
 		t.Fatal("Validate accepted a token signed by an unknown key")
 	}

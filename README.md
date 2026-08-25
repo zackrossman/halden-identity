@@ -11,8 +11,16 @@ Auth0 is the source of truth for users. `halden-identity` sits at the edge: it
 validates access tokens against the Auth0 JWKS endpoint, then calls internal
 services with short-lived signed tokens it mints for each call.
 
-The `tenant_id` claim taken from the access token is checked against
-`^[a-zA-Z0-9_-]+$` before it is carried anywhere. A validated token proves who
+The `tenant_id` claim taken from the access token is checked twice before it is
+carried anywhere: against `^[a-zA-Z0-9_-]+$` for shape, and against the user
+directory for membership. A validated token proves Auth0 issued it; it does not
+prove the subject belongs to the tenant it names, and every downstream read is
+scoped by that claim. A subject the directory does not list in the claimed
+tenant is refused.
+
+The directory is `internal/users.Store`, which is currently seeded in memory.
+Until it is backed by a real source, only the subjects it lists can
+authenticate. A validated token proves who
 issued it, not that the claim is safe to use, and downstream services take that
 value as a database filter and as a path segment in their artifact store.
 
