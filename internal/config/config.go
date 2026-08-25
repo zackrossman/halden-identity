@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -87,7 +88,18 @@ func jwksCacheMinTTL() time.Duration {
 	if err != nil || seconds <= 0 {
 		return auth.DefaultJWKSMinRefreshInterval
 	}
-	return time.Duration(seconds) * time.Second
+	// Clamp rather than reject. A value above the ceiling is a misconfiguration
+	// that would leave a revoked key trusted for as long as it names, and
+	// refusing to start over it trades a security problem for an outage. The
+	// clamp is logged so it is visible rather than mysterious.
+	interval := time.Duration(seconds) * time.Second
+	if interval > auth.MaxJWKSMinRefreshInterval {
+		slog.Warn("JWKS_CACHE_MIN_TTL_SECONDS above the permitted ceiling; clamping",
+			"requested", interval.String(),
+			"applied", auth.MaxJWKSMinRefreshInterval.String())
+		return auth.MaxJWKSMinRefreshInterval
+	}
+	return interval
 }
 
 func valueOr(name, fallback string) string {
