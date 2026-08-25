@@ -15,6 +15,7 @@ import (
 	"github.com/zackrossman/halden-identity/internal/auth"
 	"github.com/zackrossman/halden-identity/internal/config"
 	"github.com/zackrossman/halden-identity/internal/downstream"
+	"github.com/zackrossman/halden-identity/internal/httpx"
 	"github.com/zackrossman/halden-identity/internal/jobs"
 	"github.com/zackrossman/halden-identity/internal/proxy"
 	"github.com/zackrossman/halden-identity/internal/users"
@@ -49,15 +50,29 @@ func run() error {
 	}
 	slog.Info("downstream token signing configured", "algorithm", minter.Algorithm().String())
 
+	// One decision about the internal hop, applied to every caller of it.
+	proxyClient, err := httpx.NewClient(20*time.Second, cfg.ThreatDetectionTLS)
+	if err != nil {
+		return err
+	}
+	warmupClient, err := httpx.NewClient(10*time.Second, cfg.ThreatDetectionTLS)
+	if err != nil {
+		return err
+	}
+	slog.Info("internal transport configured",
+		"url", cfg.ThreatDetectionURL,
+		"tls_material", cfg.ThreatDetectionTLS.Configured(),
+		"mutual_tls", cfg.ThreatDetectionTLS.ClientCertPath != "")
+
 	directory := users.NewStore()
 
 	handler := api.NewRouter(
 		auth.NewValidator(keys, cfg.Auth0.Issuer, cfg.Auth0.Audience, directory),
 		directory,
-		proxy.NewThreatScans(cfg.ThreatDetectionURL, minter),
+		proxy.NewThreatScans(cfg.ThreatDetectionURL, minter, proxyClient),
 	)
 
-	warmup := jobs.NewWarmup(cfg.ThreatDetectionURL, minter, 5*time.Minute)
+	warmup := jobs.NewWarmup(cfg.ThreatDetectionURL, minter, 5*time.Minute, warmupClient)
 	go warmup.Run(ctx)
 
 	server := &http.Server{

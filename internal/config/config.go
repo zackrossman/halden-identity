@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/zackrossman/halden-identity/internal/auth"
+	"github.com/zackrossman/halden-identity/internal/httpx"
 )
 
 const defaultThreatDetectionURL = "http://halden-threat-detection.halden.svc.cluster.local:8000"
@@ -32,7 +33,11 @@ type Config struct {
 	// refused. Failing here stops the process instead.
 	InternalTokenPrivateKey string
 	ThreatDetectionURL      string
-	Auth0                   Auth0
+	// TLS material for calling halden-threat-detection. Optional: with none
+	// set, calls use the default transport, which is how this ran before
+	// internal TLS existed. Verification is never disabled.
+	ThreatDetectionTLS httpx.TLSConfig
+	Auth0              Auth0
 }
 
 // Load reads the configuration from the environment. Every secret and endpoint
@@ -42,6 +47,11 @@ func Load() (Config, error) {
 		ListenAddr:              valueOr("HALDEN_LISTEN_ADDR", ":8080"),
 		InternalTokenPrivateKey: os.Getenv("HALDEN_INTERNAL_TOKEN_PRIVATE_KEY"),
 		ThreatDetectionURL:      strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
+		ThreatDetectionTLS: httpx.TLSConfig{
+			CABundlePath:   os.Getenv("THREAT_DETECTION_TLS_CA_BUNDLE"),
+			ClientCertPath: os.Getenv("THREAT_DETECTION_CLIENT_CERT"),
+			ClientKeyPath:  os.Getenv("THREAT_DETECTION_CLIENT_KEY"),
+		},
 		Auth0: Auth0{
 			JWKSURL:     os.Getenv("AUTH0_JWKS_URL"),
 			Issuer:      os.Getenv("AUTH0_ISSUER"),

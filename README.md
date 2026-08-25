@@ -64,6 +64,9 @@ All settings come from the environment. See [.env.example](.env.example).
 | `AUTH0_JWKS_URL` | yes | Auth0 JWKS endpoint. |
 | `AUTH0_ISSUER` | yes | Expected `iss` claim. |
 | `AUTH0_AUDIENCE` | yes | Expected `aud` claim. |
+| `THREAT_DETECTION_TLS_CA_BUNDLE` | no | CA that signs halden-threat-detection's certificate. Required to call it over TLS, since an internally-issued certificate is not in the system roots. |
+| `THREAT_DETECTION_CLIENT_CERT` | no | This service's certificate, presented for mutual TLS. Set with the key below. |
+| `THREAT_DETECTION_CLIENT_KEY` | no | Key for the certificate above. |
 | `JWKS_CACHE_MIN_TTL_SECONDS` | no | Floor on how often the Auth0 JWKS is refetched, and so the ceiling on how long a key Auth0 has already revoked still validates tokens here. Defaults to 300. An unset, zero, negative or unparseable value falls back to the default rather than removing the floor. |
 
 ## Development
