@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -84,16 +85,52 @@ func (m *Minter) sign(build func(b *jwt.Builder) *jwt.Builder) (string, error) {
 // UserToken mints a downstream token that carries the signed-in customer's
 // tenant, taken from the validated access token.
 func (m *Minter) UserToken(claims auth.Claims) (string, error) {
-	return m.sign(func(b *jwt.Builder) *jwt.Builder {
+	signed, err := m.sign(func(b *jwt.Builder) *jwt.Builder {
 		return b.Subject(claims.Subject).Claim("tenant_id", claims.TenantID)
 	})
+	if err != nil {
+		return "", err
+	}
+	recordMinted("user", claims.Subject, claims.TenantID, nil)
+	return signed, nil
 }
 
 // PlatformToken mints a downstream token for the platform's own scheduled work,
 // which runs with no signed-in customer.
 func (m *Minter) PlatformToken() (string, error) {
-	return m.sign(func(b *jwt.Builder) *jwt.Builder {
+	signed, err := m.sign(func(b *jwt.Builder) *jwt.Builder {
 		return b.Subject("halden-identity/jobs").
 			Claim("scopes", []string{platformAggregateScope})
 	})
+	if err != nil {
+		return "", err
+	}
+	recordMinted("platform", "halden-identity/jobs", "", []string{platformAggregateScope})
+	return signed, nil
+}
+
+// recordMinted logs the issuance of a downstream credential.
+//
+// Every token this service mints authorises a read somewhere else, so an
+// investigation that can see which reads happened but not which credentials
+// were issued can only work backwards. The estate-wide platform token matters
+// most: it is the one that crosses every tenant boundary, and its issuance
+// should be countable.
+//
+// The token is never logged. Its claims identify what was granted; the token
+// itself would be a usable credential sitting in a log.
+func recordMinted(kind, subject, tenant string, scopes []string) {
+	attrs := []any{
+		"kind", kind,
+		"subject", subject,
+		"ttl_seconds", int(tokenTTL.Seconds()),
+		"audience", tokenAudience,
+	}
+	if tenant != "" {
+		attrs = append(attrs, "tenant", tenant)
+	}
+	if len(scopes) > 0 {
+		attrs = append(attrs, "scopes", scopes)
+	}
+	slog.Info("downstream token minted", attrs...)
 }

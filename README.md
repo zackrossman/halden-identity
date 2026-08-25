@@ -52,6 +52,17 @@ tenant changes touch one service.
 Authenticated routes expect `Authorization: Bearer <Auth0 access token>`. The
 tenant comes from the `https://halden.io/tenant_id` claim on that token.
 
+## Audit log
+
+Records go to stdout as JSON. Both ends of a credential's life are recorded, not
+just the failures: `accepted access token` and `rejected access token` when an
+Auth0 token is validated, and `downstream token minted` when a token is issued
+for an internal call — with the platform token's `platform:aggregate` scope
+named, since that is the credential that crosses every tenant boundary.
+
+Tokens and key material are never recorded. The claims say who was granted
+what; the token itself would be a usable credential sitting in a log.
+
 ## Configuration
 
 All settings come from the environment. See [.env.example](.env.example).
