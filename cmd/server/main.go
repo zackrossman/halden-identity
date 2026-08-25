@@ -38,7 +38,7 @@ func run() error {
 		return err
 	}
 
-	keys, err := auth.NewJWKSCache(ctx, cfg.Auth0.JWKSURL)
+	keys, err := auth.NewJWKSCache(ctx, cfg.Auth0.JWKSURL, cfg.Auth0.CacheMinTTL)
 	if err != nil {
 		return err
 	}

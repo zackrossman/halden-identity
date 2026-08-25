@@ -92,10 +92,29 @@ type JWKSCache struct {
 	url   string
 }
 
+// DefaultJWKSMinRefreshInterval is how long a revoked Auth0 signing key can
+// still be trusted when Auth0 sends no cache headers of its own.
+//
+// The interval is the floor on how often the key set is refetched, so it is
+// also the ceiling on the window in which a key Auth0 has already retired
+// still validates tokens here. It was 15 minutes, which is a long time to keep
+// honouring a key that was rotated because it leaked. Five minutes trades a
+// few more requests to the JWKS endpoint — one per instance per interval,
+// against a CDN-backed URL — for a shorter window.
+const DefaultJWKSMinRefreshInterval = 5 * time.Minute
+
 // NewJWKSCache registers the JWKS endpoint with a refreshing cache.
-func NewJWKSCache(ctx context.Context, url string) (*JWKSCache, error) {
+//
+// A minRefresh of zero or less falls back to the default rather than being
+// passed through: jwx treats a zero interval as "no floor", which would leave
+// the window governed entirely by whatever Auth0's cache headers happen to
+// say, and a misread config value should not quietly change that.
+func NewJWKSCache(ctx context.Context, url string, minRefresh time.Duration) (*JWKSCache, error) {
+	if minRefresh <= 0 {
+		minRefresh = DefaultJWKSMinRefreshInterval
+	}
 	cache := jwk.NewCache(ctx)
-	if err := cache.Register(url, jwk.WithMinRefreshInterval(15*time.Minute)); err != nil {
+	if err := cache.Register(url, jwk.WithMinRefreshInterval(minRefresh)); err != nil {
 		return nil, fmt.Errorf("auth: register jwks: %w", err)
 	}
 	return &JWKSCache{cache: cache, url: url}, nil
