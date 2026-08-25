@@ -18,11 +18,13 @@ resource "azurerm_key_vault" "this" {
   }
 }
 
-resource "azurerm_key_vault_secret" "internal_token_secret" {
-  name         = "halden-internal-token-secret"
-  value        = var.internal_token_secret
+# The signing key for downstream tokens. Only halden-identity reads it;
+# downstream services hold the public half and cannot mint tokens.
+resource "azurerm_key_vault_secret" "internal_token_private_key" {
+  name         = "halden-internal-token-private-key"
+  value        = var.internal_token_private_key
   key_vault_id = azurerm_key_vault.this.id
-  content_type = "text/plain"
+  content_type = "application/x-pem-file"
   tags         = local.tags
 }
 
@@ -60,7 +62,7 @@ resource "azurerm_private_endpoint" "key_vault" {
   }
 }
 
-# The pod reads HALDEN_INTERNAL_TOKEN_SECRET through the Key Vault CSI driver, which uses
+# The pod reads HALDEN_INTERNAL_TOKEN_PRIVATE_KEY through the Key Vault CSI driver, which uses
 # the cluster's workload identity rather than a static credential in the manifest.
 resource "azurerm_role_assignment" "workload_secrets_reader" {
   scope                = azurerm_key_vault.this.id

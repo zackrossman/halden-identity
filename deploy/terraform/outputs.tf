@@ -18,9 +18,9 @@ output "key_vault_name" {
   value       = azurerm_key_vault.this.name
 }
 
-output "internal_token_secret_id" {
-  description = "Key Vault secret the workload reads HALDEN_INTERNAL_TOKEN_SECRET from."
-  value       = azurerm_key_vault_secret.internal_token_secret.versionless_id
+output "internal_token_private_key_id" {
+  description = "Key Vault secret the workload reads HALDEN_INTERNAL_TOKEN_PRIVATE_KEY from."
+  value       = azurerm_key_vault_secret.internal_token_private_key.versionless_id
 }
 
 output "public_ip_address" {

@@ -43,7 +43,11 @@ func run() error {
 		return err
 	}
 
-	minter := downstream.NewMinter(cfg.InternalTokenSecret)
+	minter, err := downstream.NewRS256Minter(cfg.InternalTokenPrivateKey)
+	if err != nil {
+		return err
+	}
+	slog.Info("downstream token signing configured", "algorithm", minter.Algorithm().String())
 
 	handler := api.NewRouter(
 		auth.NewValidator(keys, cfg.Auth0.Issuer, cfg.Auth0.Audience),

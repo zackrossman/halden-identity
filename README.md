@@ -11,6 +11,17 @@ Auth0 is the source of truth for users. `halden-identity` sits at the edge: it
 validates access tokens against the Auth0 JWKS endpoint, then calls internal
 services with short-lived signed tokens it mints for each call.
 
+The `tenant_id` claim taken from the access token is checked against
+`^[a-zA-Z0-9_-]+$` before it is carried anywhere. A validated token proves who
+issued it, not that the claim is safe to use, and downstream services take that
+value as a database filter and as a path segment in their artifact store.
+
+Downstream tokens are signed RS256 with `HALDEN_INTERNAL_TOKEN_PRIVATE_KEY`.
+The private key stays in this service; downstream services hold only the
+matching public key, so reading their configuration, environment or pods does
+not let anyone mint a token. There is no symmetric fallback — a shared secret
+would put a minting key in every service that only needs to verify.
+
 Downstream:
 
 | Service | Call |
@@ -40,7 +51,7 @@ All settings come from the environment. See [.env.example](.env.example).
 | Variable | Required | Description |
 |---|---|---|
 | `HALDEN_LISTEN_ADDR` | no | Listen address, default `:8080`. |
-| `HALDEN_INTERNAL_TOKEN_SECRET` | yes | Secret used to sign the short-lived tokens presented to internal services. Read from Key Vault in deployed environments. |
+| `HALDEN_INTERNAL_TOKEN_PRIVATE_KEY` | yes | PEM-encoded RSA private key used to sign downstream tokens with RS256. The private half stays here; downstream services hold only the matching public key, so none of them can mint a token. Read from Key Vault in deployed environments. |
 | `THREAT_DETECTION_URL` | no | Base URL of `halden-threat-detection`, default `http://halden-threat-detection.halden.svc.cluster.local:8000`. |
 | `AUTH0_JWKS_URL` | yes | Auth0 JWKS endpoint. |
 | `AUTH0_ISSUER` | yes | Expected `iss` claim. |

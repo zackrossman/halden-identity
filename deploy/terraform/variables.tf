@@ -26,8 +26,8 @@ variable "tls_certificate_secret_id" {
   type        = string
 }
 
-variable "internal_token_secret" {
-  description = "Secret used to sign the short-lived tokens halden-identity presents to internal services. Supplied at apply time; never committed."
+variable "internal_token_private_key" {
+  description = "PEM-encoded RSA private key used to sign the short-lived tokens halden-identity presents to internal services. Downstream services hold only the matching public key. Supplied at apply time; never committed."
   type        = string
   sensitive   = true
 }

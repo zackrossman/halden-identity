@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -17,6 +18,17 @@ const TenantClaim = "https://halden.io/tenant_id"
 
 // ErrMissingTenant is returned when a token validates but carries no tenant claim.
 var ErrMissingTenant = errors.New("auth: token has no tenant claim")
+
+// ErrInvalidTenant is returned when the tenant claim is present but is not a
+// well-formed tenant id.
+var ErrInvalidTenant = errors.New("auth: token has a malformed tenant claim")
+
+// The shape a tenant id must have. A validated Auth0 token proves who issued
+// it, not that this claim is safe to use, and downstream services take the
+// value as a database filter and as a path segment in the artifact store. A
+// claim carrying a separator or `..` escapes its own tenant there, so the
+// gateway refuses it here rather than passing it on.
+var tenantIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Claims is the authenticated identity taken from a validated access token.
 type Claims struct {
@@ -66,6 +78,9 @@ func (v *Validator) Validate(ctx context.Context, raw string) (Claims, error) {
 	tenant, ok := claim.(string)
 	if !ok || tenant == "" {
 		return Claims{}, ErrMissingTenant
+	}
+	if !tenantIDPattern.MatchString(tenant) {
+		return Claims{}, fmt.Errorf("%w: %q", ErrInvalidTenant, tenant)
 	}
 
 	return Claims{Subject: token.Subject(), TenantID: tenant}, nil

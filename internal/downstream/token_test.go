@@ -1,6 +1,7 @@
 package downstream
 
 import (
+	"crypto/rsa"
 	"testing"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -9,12 +10,23 @@ import (
 	"github.com/zackrossman/halden-identity/internal/auth"
 )
 
-const secret = "unit-test-secret"
+// testMinter builds an RS256 minter over a keypair generated for this run, and
+// returns the public half so a test can verify the way a downstream service
+// would — holding nothing but the public key.
+func testMinter(t *testing.T) (*Minter, *rsa.PublicKey) {
+	t.Helper()
+	key, keyPEM := generateKeyPEM(t, true)
+	m, err := NewRS256Minter(keyPEM)
+	if err != nil {
+		t.Fatalf("new minter: %v", err)
+	}
+	return m, &key.PublicKey
+}
 
-func parse(t *testing.T, raw string) jwt.Token {
+func parse(t *testing.T, raw string, verifyKey *rsa.PublicKey) jwt.Token {
 	t.Helper()
 	tok, err := jwt.Parse([]byte(raw),
-		jwt.WithVerify(true), jwt.WithKey(jwa.HS256, []byte(secret)),
+		jwt.WithVerify(true), jwt.WithKey(jwa.RS256, verifyKey),
 		jwt.WithValidate(true),
 		jwt.WithIssuer(tokenIssuer), jwt.WithAudience(tokenAudience),
 	)
@@ -25,11 +37,12 @@ func parse(t *testing.T, raw string) jwt.Token {
 }
 
 func TestUserToken_CarriesTenant(t *testing.T) {
-	raw, err := NewMinter(secret).UserToken(auth.Claims{Subject: "auth0|nw-1", TenantID: "northwind"})
+	m, pub := testMinter(t)
+	raw, err := m.UserToken(auth.Claims{Subject: "auth0|nw-1", TenantID: "northwind"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok := parse(t, raw)
+	tok := parse(t, raw, pub)
 	if got, _ := tok.Get("tenant_id"); got != "northwind" {
 		t.Errorf("tenant_id = %v, want northwind", got)
 	}
@@ -39,11 +52,12 @@ func TestUserToken_CarriesTenant(t *testing.T) {
 }
 
 func TestPlatformToken_CarriesScope(t *testing.T) {
-	raw, err := NewMinter(secret).PlatformToken()
+	m, pub := testMinter(t)
+	raw, err := m.PlatformToken()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok := parse(t, raw)
+	tok := parse(t, raw, pub)
 	scopes, ok := tok.Get("scopes")
 	if !ok {
 		t.Fatal("no scopes claim")
@@ -54,9 +68,23 @@ func TestPlatformToken_CarriesScope(t *testing.T) {
 	}
 }
 
-func TestTokens_RejectWrongSecret(t *testing.T) {
-	raw, _ := NewMinter(secret).UserToken(auth.Claims{Subject: "s", TenantID: "t"})
-	if _, err := jwt.Parse([]byte(raw), jwt.WithVerify(true), jwt.WithKey(jwa.HS256, []byte("wrong"))); err == nil {
-		t.Error("token verified under the wrong secret")
+func TestTokens_DoNotVerifyUnderAnotherKey(t *testing.T) {
+	m, _ := testMinter(t)
+	_, otherPub := testMinter(t)
+
+	raw, err := m.UserToken(auth.Claims{Subject: "s", TenantID: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := jwt.Parse([]byte(raw), jwt.WithVerify(true), jwt.WithKey(jwa.RS256, otherPub)); err == nil {
+		t.Error("token verified under an unrelated public key")
+	}
+}
+
+func TestTokens_AreSignedRS256(t *testing.T) {
+	m, _ := testMinter(t)
+	if m.Algorithm() != jwa.RS256 {
+		t.Errorf("algorithm = %v, want RS256", m.Algorithm())
 	}
 }
