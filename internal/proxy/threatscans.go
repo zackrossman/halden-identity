@@ -49,14 +49,21 @@ func (h *ThreatScans) List(w http.ResponseWriter, r *http.Request) {
 	h.forward(w, r, "/v1/scans", token)
 }
 
-// Summary serves GET /v1/threat-scans/summary. The summary figures come from the
-// platform rollup, which runs under the platform credential.
+// Summary serves GET /v1/threat-scans/summary: the caller's own tenant's totals.
+//
+// This presents the caller's tenant token, not the platform credential. The
+// platform credential reads across the estate, and this handler streams the
+// downstream body straight back to a single customer, so minting one here
+// handed every caller other tenants' detection counts, resource names and
+// malware families. The estate-wide read belongs to the scheduled jobs in
+// internal/jobs, which serve no customer response.
 func (h *ThreatScans) Summary(w http.ResponseWriter, r *http.Request) {
-	if _, ok := auth.FromContext(r.Context()); !ok {
+	claims, ok := auth.FromContext(r.Context())
+	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	token, err := h.minter.PlatformToken()
+	token, err := h.minter.UserToken(claims)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "mint downstream token", "error", err)
 		http.Error(w, "bad gateway", http.StatusBadGateway)

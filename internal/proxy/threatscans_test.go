@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -93,7 +94,13 @@ func TestList_SendsUserTenantToken(t *testing.T) {
 	}
 }
 
-func TestSummary_SendsVerifiableToken(t *testing.T) {
+// A signed token is not the same as a correctly scoped one. This handler used
+// to present the platform credential, which reads across the estate, and the
+// response is streamed straight back to one customer. The token verified, so a
+// test that only checked the signature stayed green while every caller was
+// served other tenants' data. These tests assert the scope.
+
+func TestSummary_SendsCallerTenantToken(t *testing.T) {
 	c := newCapture(t)
 	rec := httptest.NewRecorder()
 	c.proxy.Summary(rec, authed(httptest.NewRequest(http.MethodGet, "/v1/threat-scans/summary", nil), "northwind", "auth0|nw-1"))
@@ -101,8 +108,72 @@ func TestSummary_SendsVerifiableToken(t *testing.T) {
 	if c.got == nil {
 		t.Fatalf("downstream received no request (status %d)", rec.Code)
 	}
-	// The summary call presents a valid, signed downstream token.
-	bearerClaims(t, c.got)
+	tok := bearerClaims(t, c.got)
+	tenant, _ := tok.Get("tenant_id")
+	if tenant != "northwind" {
+		t.Errorf("tenant_id = %v, want northwind", tenant)
+	}
+}
+
+func TestSummary_DoesNotRequestTheEstateWideScope(t *testing.T) {
+	c := newCapture(t)
+	rec := httptest.NewRecorder()
+	c.proxy.Summary(rec, authed(httptest.NewRequest(http.MethodGet, "/v1/threat-scans/summary", nil), "northwind", "auth0|nw-1"))
+
+	if c.got == nil {
+		t.Fatalf("downstream received no request (status %d)", rec.Code)
+	}
+	tok := bearerClaims(t, c.got)
+	if scopes, ok := tok.Get("scopes"); ok {
+		t.Errorf("summary token carries scopes %v; a customer response must not use the estate-wide credential", scopes)
+	}
+}
+
+func TestSummary_CarriesTheCallerSubject(t *testing.T) {
+	c := newCapture(t)
+	rec := httptest.NewRecorder()
+	c.proxy.Summary(rec, authed(httptest.NewRequest(http.MethodGet, "/v1/threat-scans/summary", nil), "contoso", "auth0|ct-9"))
+
+	if c.got == nil {
+		t.Fatalf("downstream received no request (status %d)", rec.Code)
+	}
+	tok := bearerClaims(t, c.got)
+	if tok.Subject() != "auth0|ct-9" {
+		t.Errorf("sub = %q, want auth0|ct-9", tok.Subject())
+	}
+	tenant, _ := tok.Get("tenant_id")
+	if tenant != "contoso" {
+		t.Errorf("tenant_id = %v, want contoso", tenant)
+	}
+}
+
+func TestSummary_RequiresClaims(t *testing.T) {
+	c := newCapture(t)
+	rec := httptest.NewRecorder()
+	c.proxy.Summary(rec, httptest.NewRequest(http.MethodGet, "/v1/threat-scans/summary", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+// The scheduled jobs still legitimately read across the estate; they serve no
+// customer response.
+func TestPlatformToken_StillCarriesTheAggregateScope(t *testing.T) {
+	signed, err := minter().PlatformToken()
+	if err != nil {
+		t.Fatalf("mint platform token: %v", err)
+	}
+	tok, err := jwt.Parse([]byte(signed), jwt.WithVerify(true), jwt.WithKey(jwa.RS256, testPublicKey))
+	if err != nil {
+		t.Fatalf("platform token did not verify: %v", err)
+	}
+	scopes, ok := tok.Get("scopes")
+	if !ok {
+		t.Fatal("platform token carries no scopes")
+	}
+	if fmt.Sprint(scopes) != "[platform:aggregate]" {
+		t.Errorf("scopes = %v, want [platform:aggregate]", scopes)
+	}
 }
 
 func TestList_RequiresClaims(t *testing.T) {

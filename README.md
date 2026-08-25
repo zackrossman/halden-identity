@@ -39,7 +39,7 @@ tenant changes touch one service.
 | GET | `/v1/users/me` | bearer token | The calling user's profile. |
 | GET | `/v1/users` | bearer token | Users in the caller's tenant. |
 | GET | `/v1/threat-scans` | bearer token | Threat scans for the caller's tenant, read from `halden-threat-detection`. |
-| GET | `/v1/threat-scans/summary` | bearer token | Precomputed threat-scan summary, served from the platform rollup. |
+| GET | `/v1/threat-scans/summary` | bearer token | Threat-scan totals for the caller's tenant, read from `halden-threat-detection`. |
 
 Authenticated routes expect `Authorization: Bearer <Auth0 access token>`. The
 tenant comes from the `https://halden.io/tenant_id` claim on that token.
