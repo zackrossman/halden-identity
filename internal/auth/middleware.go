@@ -24,6 +24,16 @@ func Middleware(v *Validator) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Recording only rejections answers "who was turned away" and not
+			// "who got in", which is the question an investigation actually
+			// starts from. The token itself is never logged — the subject and
+			// tenant identify the caller without putting a usable credential
+			// in the log.
+			slog.InfoContext(r.Context(), "accepted access token",
+				"subject", claims.Subject,
+				"tenant", claims.TenantID,
+				"path", r.URL.Path)
+
 			next.ServeHTTP(w, r.WithContext(WithClaims(r.Context(), claims)))
 		})
 	}
