@@ -4,7 +4,11 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
+
+	"github.com/zackrossman/halden-identity/internal/auth"
 )
 
 const defaultThreatDetectionURL = "http://halden-threat-detection.halden.svc.cluster.local:8000"
@@ -14,6 +18,9 @@ type Auth0 struct {
 	JWKSURL  string
 	Issuer   string
 	Audience string
+	// Floor on how often the JWKS is refetched, and therefore the ceiling on
+	// how long a key Auth0 has already revoked still validates tokens here.
+	CacheMinTTL time.Duration
 }
 
 // Config is the full service configuration.
@@ -36,9 +43,10 @@ func Load() (Config, error) {
 		InternalTokenPrivateKey: os.Getenv("HALDEN_INTERNAL_TOKEN_PRIVATE_KEY"),
 		ThreatDetectionURL:      strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
 		Auth0: Auth0{
-			JWKSURL:  os.Getenv("AUTH0_JWKS_URL"),
-			Issuer:   os.Getenv("AUTH0_ISSUER"),
-			Audience: os.Getenv("AUTH0_AUDIENCE"),
+			JWKSURL:     os.Getenv("AUTH0_JWKS_URL"),
+			Issuer:      os.Getenv("AUTH0_ISSUER"),
+			Audience:    os.Getenv("AUTH0_AUDIENCE"),
+			CacheMinTTL: jwksCacheMinTTL(),
 		},
 	}
 
@@ -54,6 +62,22 @@ func Load() (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// jwksCacheMinTTL reads JWKS_CACHE_MIN_TTL_SECONDS, falling back to the
+// package default when it is unset or unreadable. An unparseable value is not
+// an error worth refusing to start over, but it must not silently become zero
+// either — zero removes the floor entirely.
+func jwksCacheMinTTL() time.Duration {
+	raw := os.Getenv("JWKS_CACHE_MIN_TTL_SECONDS")
+	if raw == "" {
+		return auth.DefaultJWKSMinRefreshInterval
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds <= 0 {
+		return auth.DefaultJWKSMinRefreshInterval
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func valueOr(name, fallback string) string {

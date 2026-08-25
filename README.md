@@ -64,6 +64,7 @@ All settings come from the environment. See [.env.example](.env.example).
 | `AUTH0_JWKS_URL` | yes | Auth0 JWKS endpoint. |
 | `AUTH0_ISSUER` | yes | Expected `iss` claim. |
 | `AUTH0_AUDIENCE` | yes | Expected `aud` claim. |
+| `JWKS_CACHE_MIN_TTL_SECONDS` | no | Floor on how often the Auth0 JWKS is refetched, and so the ceiling on how long a key Auth0 has already revoked still validates tokens here. Defaults to 300. An unset, zero, negative or unparseable value falls back to the default rather than removing the floor. |
 
 ## Development
 
