@@ -33,7 +33,7 @@ func newCapture(t *testing.T) *capture {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	t.Cleanup(downstream.Close)
-	c.proxy = NewThreatScans(downstream.URL, minter())
+	c.proxy = NewThreatScans(downstream.URL, minter(), nil)
 	return c
 }
 

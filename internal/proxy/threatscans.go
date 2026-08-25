@@ -25,11 +25,17 @@ type ThreatScans struct {
 }
 
 // NewThreatScans builds the proxy against the downstream base URL.
-func NewThreatScans(baseURL string, minter Minter) *ThreatScans {
+//
+// The client is injected so the TLS material for the internal hop is decided
+// once, at startup, rather than separately by every caller of this service.
+func NewThreatScans(baseURL string, minter Minter, client *http.Client) *ThreatScans {
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
 	return &ThreatScans{
 		baseURL: baseURL,
 		minter:  minter,
-		client:  &http.Client{Timeout: 20 * time.Second},
+		client:  client,
 	}
 }
 

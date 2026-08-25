@@ -24,11 +24,17 @@ type Warmup struct {
 }
 
 // NewWarmup builds the warmup job.
-func NewWarmup(baseURL string, minter tokenMinter, interval time.Duration) *Warmup {
+//
+// The client is injected for the same reason the proxy's is: the internal hop
+// is TLS or it is not, and that should not be decided in two places.
+func NewWarmup(baseURL string, minter tokenMinter, interval time.Duration, client *http.Client) *Warmup {
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 	return &Warmup{
 		baseURL:  baseURL,
 		minter:   minter,
-		client:   &http.Client{Timeout: 10 * time.Second},
+		client:   client,
 		interval: interval,
 	}
 }
