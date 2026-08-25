@@ -32,6 +32,13 @@ variable "internal_token_secret" {
   sensitive   = true
 }
 
+variable "internal_token_private_key" {
+  description = "PEM-encoded RSA private key used to sign downstream tokens with RS256, so the verifying service holds only the public half. Empty until the matching public key is deployed to halden-threat-detection; while empty, tokens stay HS256. Supplied at apply time; never committed."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "management_cidrs" {
   description = "CIDRs allowed to reach Key Vault and the container registry for administration, e.g. the deployment agent subnet."
   type        = list(string)

@@ -20,17 +20,22 @@ type Auth0 struct {
 type Config struct {
 	ListenAddr          string
 	InternalTokenSecret string
-	ThreatDetectionURL  string
-	Auth0               Auth0
+	// PEM-encoded RSA private key used to sign downstream tokens with RS256.
+	// Optional, and empty until the migration off the shared secret reaches
+	// this service: while it is empty, downstream tokens stay HS256.
+	InternalTokenPrivateKey string
+	ThreatDetectionURL      string
+	Auth0                   Auth0
 }
 
 // Load reads the configuration from the environment. Every secret and endpoint
 // comes from the environment; nothing is baked into the binary.
 func Load() (Config, error) {
 	cfg := Config{
-		ListenAddr:          valueOr("HALDEN_LISTEN_ADDR", ":8080"),
-		InternalTokenSecret: os.Getenv("HALDEN_INTERNAL_TOKEN_SECRET"),
-		ThreatDetectionURL:  strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
+		ListenAddr:              valueOr("HALDEN_LISTEN_ADDR", ":8080"),
+		InternalTokenSecret:     os.Getenv("HALDEN_INTERNAL_TOKEN_SECRET"),
+		InternalTokenPrivateKey: os.Getenv("HALDEN_INTERNAL_TOKEN_PRIVATE_KEY"),
+		ThreatDetectionURL:      strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
 		Auth0: Auth0{
 			JWKSURL:  os.Getenv("AUTH0_JWKS_URL"),
 			Issuer:   os.Getenv("AUTH0_ISSUER"),

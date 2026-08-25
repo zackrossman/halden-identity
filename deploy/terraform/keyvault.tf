@@ -26,6 +26,18 @@ resource "azurerm_key_vault_secret" "internal_token_secret" {
   tags         = local.tags
 }
 
+# Held only while the platform still signs HS256. Once every service verifies
+# RS256, the shared secret above is what gets deleted; this one replaces it.
+resource "azurerm_key_vault_secret" "internal_token_private_key" {
+  count = var.internal_token_private_key == "" ? 0 : 1
+
+  name         = "halden-internal-token-private-key"
+  value        = var.internal_token_private_key
+  key_vault_id = azurerm_key_vault.this.id
+  content_type = "application/x-pem-file"
+  tags         = local.tags
+}
+
 resource "azurerm_private_dns_zone" "key_vault" {
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = azurerm_resource_group.this.name
