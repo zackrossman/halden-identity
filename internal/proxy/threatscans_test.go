@@ -1,17 +1,20 @@
 package proxy
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 
 	"github.com/zackrossman/halden-identity/internal/auth"
 	"github.com/zackrossman/halden-identity/internal/downstream"
 )
-
-const testSecret = "test-internal-token-secret"
 
 // capture stands up a stub halden-threat-detection and returns a proxy pointed
 // at it, plus the request the stub last saw.
@@ -33,8 +36,27 @@ func newCapture(t *testing.T) *capture {
 	return c
 }
 
+// testKeyPEM is the signing key for this package's tests, generated once per
+// run so no key material is checked in.
+var testKeyPEM, testPublicKey = func() (string, *rsa.PublicKey) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		panic(err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	return string(pemBytes), &key.PublicKey
+}()
+
 func minter() Minter {
-	return downstream.NewMinter(testSecret)
+	m, err := downstream.NewRS256Minter(testKeyPEM)
+	if err != nil {
+		panic(err)
+	}
+	return m
 }
 
 func authed(r *http.Request, tenant, subject string) *http.Request {
@@ -49,7 +71,7 @@ func bearerClaims(t *testing.T, r *http.Request) jwt.Token {
 	if len(h) < 8 || h[:7] != "Bearer " {
 		t.Fatalf("missing bearer token, got %q", h)
 	}
-	tok, err := jwt.Parse([]byte(h[7:]), jwt.WithVerify(true), jwt.WithKey(jwtHS256, []byte(testSecret)))
+	tok, err := jwt.Parse([]byte(h[7:]), jwt.WithVerify(true), jwt.WithKey(jwa.RS256, testPublicKey))
 	if err != nil {
 		t.Fatalf("downstream token did not verify: %v", err)
 	}

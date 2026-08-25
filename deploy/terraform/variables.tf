@@ -26,17 +26,10 @@ variable "tls_certificate_secret_id" {
   type        = string
 }
 
-variable "internal_token_secret" {
-  description = "Secret used to sign the short-lived tokens halden-identity presents to internal services. Supplied at apply time; never committed."
-  type        = string
-  sensitive   = true
-}
-
 variable "internal_token_private_key" {
-  description = "PEM-encoded RSA private key used to sign downstream tokens with RS256, so the verifying service holds only the public half. Empty until the matching public key is deployed to halden-threat-detection; while empty, tokens stay HS256. Supplied at apply time; never committed."
+  description = "PEM-encoded RSA private key used to sign the short-lived tokens halden-identity presents to internal services. Downstream services hold only the matching public key. Supplied at apply time; never committed."
   type        = string
   sensitive   = true
-  default     = ""
 }
 
 variable "management_cidrs" {

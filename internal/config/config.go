@@ -18,11 +18,11 @@ type Auth0 struct {
 
 // Config is the full service configuration.
 type Config struct {
-	ListenAddr          string
-	InternalTokenSecret string
+	ListenAddr string
 	// PEM-encoded RSA private key used to sign downstream tokens with RS256.
-	// Optional, and empty until the migration off the shared secret reaches
-	// this service: while it is empty, downstream tokens stay HS256.
+	// Required: internal services verify against the matching public key and
+	// accept nothing else, so a missing key means every downstream call is
+	// refused. Failing here stops the process instead.
 	InternalTokenPrivateKey string
 	ThreatDetectionURL      string
 	Auth0                   Auth0
@@ -33,7 +33,6 @@ type Config struct {
 func Load() (Config, error) {
 	cfg := Config{
 		ListenAddr:              valueOr("HALDEN_LISTEN_ADDR", ":8080"),
-		InternalTokenSecret:     os.Getenv("HALDEN_INTERNAL_TOKEN_SECRET"),
 		InternalTokenPrivateKey: os.Getenv("HALDEN_INTERNAL_TOKEN_PRIVATE_KEY"),
 		ThreatDetectionURL:      strings.TrimRight(valueOr("THREAT_DETECTION_URL", defaultThreatDetectionURL), "/"),
 		Auth0: Auth0{
@@ -44,10 +43,10 @@ func Load() (Config, error) {
 	}
 
 	required := map[string]string{
-		"HALDEN_INTERNAL_TOKEN_SECRET": cfg.InternalTokenSecret,
-		"AUTH0_JWKS_URL":               cfg.Auth0.JWKSURL,
-		"AUTH0_ISSUER":                 cfg.Auth0.Issuer,
-		"AUTH0_AUDIENCE":               cfg.Auth0.Audience,
+		"HALDEN_INTERNAL_TOKEN_PRIVATE_KEY": cfg.InternalTokenPrivateKey,
+		"AUTH0_JWKS_URL":                    cfg.Auth0.JWKSURL,
+		"AUTH0_ISSUER":                      cfg.Auth0.Issuer,
+		"AUTH0_AUDIENCE":                    cfg.Auth0.Audience,
 	}
 	for name, value := range required {
 		if value == "" {

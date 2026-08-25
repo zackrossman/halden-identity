@@ -43,7 +43,7 @@ func run() error {
 		return err
 	}
 
-	minter, err := downstream.NewMinterFromConfig(cfg.InternalTokenSecret, cfg.InternalTokenPrivateKey)
+	minter, err := downstream.NewRS256Minter(cfg.InternalTokenPrivateKey)
 	if err != nil {
 		return err
 	}

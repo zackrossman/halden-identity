@@ -88,38 +88,21 @@ func TestRS256Minter_TokenDoesNotVerifyAgainstTheSharedSecret(t *testing.T) {
 		t.Fatalf("mint: %v", err)
 	}
 
-	if _, err := jwt.Parse([]byte(signed), jwt.WithVerify(true), jwt.WithKey(jwa.HS256, []byte(secret))); err == nil {
-		t.Fatal("an RS256 token verified against the shared HMAC secret")
+	if _, err := jwt.Parse([]byte(signed), jwt.WithVerify(true), jwt.WithKey(jwa.HS256, []byte("any-shared-secret-an-attacker-might-hold"))); err == nil {
+		t.Fatal("an RS256 token verified as HMAC against a guessable secret")
 	}
 }
 
-func TestNewMinterFromConfig_FallsBackToHS256(t *testing.T) {
-	m, err := NewMinterFromConfig(secret, "")
-	if err != nil {
-		t.Fatalf("from config: %v", err)
-	}
-	if m.Algorithm() != jwa.HS256 {
-		t.Errorf("algorithm = %v, want HS256 when no private key is configured", m.Algorithm())
-	}
-
-	signed, err := m.UserToken(auth.Claims{Subject: "auth0|nw-1", TenantID: "northwind"})
-	if err != nil {
-		t.Fatalf("mint: %v", err)
-	}
-	if _, err := jwt.Parse([]byte(signed), jwt.WithVerify(true), jwt.WithKey(jwa.HS256, []byte(secret))); err != nil {
-		t.Fatalf("fallback token did not verify with the shared secret: %v", err)
-	}
-}
-
-func TestNewMinterFromConfig_PrefersThePrivateKey(t *testing.T) {
+func TestMinter_HasNoSymmetricPath(t *testing.T) {
+	// A shared secret would put a minting key in every service that only needs
+	// to verify. There must be no constructor that produces one.
 	_, keyPEM := generateKeyPEM(t, true)
-
-	m, err := NewMinterFromConfig(secret, keyPEM)
+	m, err := NewRS256Minter(keyPEM)
 	if err != nil {
-		t.Fatalf("from config: %v", err)
+		t.Fatalf("new minter: %v", err)
 	}
 	if m.Algorithm() != jwa.RS256 {
-		t.Errorf("algorithm = %v, want RS256 when a private key is configured", m.Algorithm())
+		t.Fatalf("algorithm = %v, want RS256", m.Algorithm())
 	}
 }
 

@@ -18,19 +18,9 @@ resource "azurerm_key_vault" "this" {
   }
 }
 
-resource "azurerm_key_vault_secret" "internal_token_secret" {
-  name         = "halden-internal-token-secret"
-  value        = var.internal_token_secret
-  key_vault_id = azurerm_key_vault.this.id
-  content_type = "text/plain"
-  tags         = local.tags
-}
-
-# Held only while the platform still signs HS256. Once every service verifies
-# RS256, the shared secret above is what gets deleted; this one replaces it.
+# The signing key for downstream tokens. Only halden-identity reads it;
+# downstream services hold the public half and cannot mint tokens.
 resource "azurerm_key_vault_secret" "internal_token_private_key" {
-  count = var.internal_token_private_key == "" ? 0 : 1
-
   name         = "halden-internal-token-private-key"
   value        = var.internal_token_private_key
   key_vault_id = azurerm_key_vault.this.id
@@ -72,7 +62,7 @@ resource "azurerm_private_endpoint" "key_vault" {
   }
 }
 
-# The pod reads HALDEN_INTERNAL_TOKEN_SECRET through the Key Vault CSI driver, which uses
+# The pod reads HALDEN_INTERNAL_TOKEN_PRIVATE_KEY through the Key Vault CSI driver, which uses
 # the cluster's workload identity rather than a static credential in the manifest.
 resource "azurerm_role_assignment" "workload_secrets_reader" {
   scope                = azurerm_key_vault.this.id
