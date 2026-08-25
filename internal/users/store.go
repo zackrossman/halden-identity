@@ -39,6 +39,17 @@ func (s *Store) ListByTenant(tenantID string) []User {
 	return out
 }
 
+// HasMember reports whether a subject belongs to a tenant.
+//
+// This is the directory's answer to an authorization question, kept separate
+// from Find so the auth package can ask it without depending on the user
+// model. The directory is the authority: a subject it does not list is not a
+// member, whatever the caller's token claims.
+func (s *Store) HasMember(tenantID, subject string) bool {
+	_, ok := s.Find(tenantID, subject)
+	return ok
+}
+
 // Find returns the profile for one subject within a tenant.
 func (s *Store) Find(tenantID, subject string) (User, bool) {
 	for _, u := range s.byTenant[tenantID] {

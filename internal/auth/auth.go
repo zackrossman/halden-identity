@@ -23,6 +23,15 @@ var ErrMissingTenant = errors.New("auth: token has no tenant claim")
 // well-formed tenant id.
 var ErrInvalidTenant = errors.New("auth: token has a malformed tenant claim")
 
+// ErrNotTenantMember is returned when a token's subject is not a member of the
+// tenant its claim names.
+var ErrNotTenantMember = errors.New("auth: subject is not a member of the claimed tenant")
+
+// ErrNoDirectory is returned when a Validator was built without a tenant
+// directory. Membership cannot be checked without one, so the request is
+// refused rather than admitted unchecked.
+var ErrNoDirectory = errors.New("auth: no tenant directory configured")
+
 // The shape a tenant id must have. A validated Auth0 token proves who issued
 // it, not that this claim is safe to use, and downstream services take the
 // value as a database filter and as a path segment in the artifact store. A
@@ -41,16 +50,28 @@ type KeySource interface {
 	Keys(ctx context.Context) (jwk.Set, error)
 }
 
-// Validator checks access tokens against the Auth0 JWKS, issuer and audience.
-type Validator struct {
-	keys     KeySource
-	issuer   string
-	audience string
+// TenantDirectory answers whether a subject belongs to a tenant.
+//
+// A validated Auth0 token carries the tenant the caller claims to act for.
+// Nothing in the signature makes that claim true: it is set by Auth0 rules and
+// an error or a compromise there points a caller at another tenant's data with
+// a perfectly valid token. The directory is the second opinion.
+type TenantDirectory interface {
+	HasMember(tenantID, subject string) bool
 }
 
-// NewValidator builds a Validator over the given key source.
-func NewValidator(keys KeySource, issuer, audience string) *Validator {
-	return &Validator{keys: keys, issuer: issuer, audience: audience}
+// Validator checks access tokens against the Auth0 JWKS, issuer and audience,
+// and the tenant claim against the directory.
+type Validator struct {
+	keys      KeySource
+	issuer    string
+	audience  string
+	directory TenantDirectory
+}
+
+// NewValidator builds a Validator over the given key source and tenant directory.
+func NewValidator(keys KeySource, issuer, audience string, directory TenantDirectory) *Validator {
+	return &Validator{keys: keys, issuer: issuer, audience: audience, directory: directory}
 }
 
 // Validate parses and verifies a raw bearer token and returns its claims.
@@ -81,6 +102,18 @@ func (v *Validator) Validate(ctx context.Context, raw string) (Claims, error) {
 	}
 	if !tenantIDPattern.MatchString(tenant) {
 		return Claims{}, fmt.Errorf("%w: %q", ErrInvalidTenant, tenant)
+	}
+
+	// The signature proves Auth0 issued the token. It does not prove the
+	// subject belongs to the tenant the token names, and that claim is what
+	// every downstream read is scoped by. A Validator with no directory cannot
+	// answer the question, so it refuses rather than admitting the claim
+	// unchecked.
+	if v.directory == nil {
+		return Claims{}, ErrNoDirectory
+	}
+	if !v.directory.HasMember(tenant, token.Subject()) {
+		return Claims{}, fmt.Errorf("%w: %q in %q", ErrNotTenantMember, token.Subject(), tenant)
 	}
 
 	return Claims{Subject: token.Subject(), TenantID: tenant}, nil

@@ -37,8 +37,10 @@ func currentUser(store *users.Store) http.HandlerFunc {
 		}
 		user, found := store.Find(claims.TenantID, claims.Subject)
 		if !found {
-			// Auth0 is the source of truth for users, so a token can legitimately
-			// name a subject the local directory has not seen yet.
+			// Unreachable while the validator checks membership against this
+			// same directory: a request that got here is from a subject the
+			// directory listed. Kept as a defensive fallback rather than a
+			// panic, in case the two are ever pointed at different sources.
 			user = users.User{Subject: claims.Subject, TenantID: claims.TenantID}
 		}
 		writeJSON(r, w, http.StatusOK, user)

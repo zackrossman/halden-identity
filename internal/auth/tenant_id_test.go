@@ -47,10 +47,15 @@ func TestValidate_RejectsMalformedTenantClaim(t *testing.T) {
 
 func TestValidate_AcceptsWellFormedTenantClaims(t *testing.T) {
 	s := newSigner(t)
-	validator := newTestValidator(s)
 
 	for _, tenant := range []string{"northwind", "contoso", "acme-corp", "acme_corp", "T3nant"} {
 		t.Run(tenant, func(t *testing.T) {
+			// The directory must list the pair; this test is about the format
+			// check, not membership.
+			validator := NewValidator(
+				staticKeys{set: s.public}, testIssuer, testAudience,
+				stubDirectory{tenant: "auth0|nw-001"},
+			)
 			signed := s.token(t, func(b *jwt.Builder) *jwt.Builder {
 				return b.Claim(TenantClaim, tenant)
 			})

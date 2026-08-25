@@ -49,9 +49,11 @@ func run() error {
 	}
 	slog.Info("downstream token signing configured", "algorithm", minter.Algorithm().String())
 
+	directory := users.NewStore()
+
 	handler := api.NewRouter(
-		auth.NewValidator(keys, cfg.Auth0.Issuer, cfg.Auth0.Audience),
-		users.NewStore(),
+		auth.NewValidator(keys, cfg.Auth0.Issuer, cfg.Auth0.Audience, directory),
+		directory,
 		proxy.NewThreatScans(cfg.ThreatDetectionURL, minter),
 	)
 
